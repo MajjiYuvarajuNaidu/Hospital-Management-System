@@ -1,17 +1,54 @@
 const User = require("../models/User");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-
+const Patient = require("../Models/Patient");
 
 // ==================== REGISTER ====================
 
 const registerUser = async (req, res) => {
-
     try {
-        const { name, email, password, role } = req.body;
+
+        const {
+            name,
+            email,
+            password,
+            age,
+            phone,
+            gender
+        } = req.body;
+
+        // Public registration is always for patients
+        const role = "patient";
+
+        // Check required fields
+        if (!name || !email || !password) {
+            return res.status(400).json({
+                message: "Name, email and password are required"
+            });
+        }
+
+        // Validate password
+        if (password.length < 6) {
+            return res.status(400).json({
+                message: "Password must be at least 6 characters"
+            });
+        }
+
+        // Validate patient-specific fields
+        if (!age || !phone || !gender) {
+            return res.status(400).json({
+                message:
+                    "Age, phone and gender are required for patients"
+            });
+        }
+
+        // Normalize email
+        const normalizedEmail = email.trim().toLowerCase();
 
         // Check if user already exists
-        const existingUser = await User.findOne({ email });
+        const existingUser = await User.findOne({
+            email: normalizedEmail
+        });
 
         if (existingUser) {
             return res.status(400).json({
@@ -22,12 +59,20 @@ const registerUser = async (req, res) => {
         // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Create user
+        // Create User
         const user = await User.create({
-            name,
-            email,
+            name: name.trim(),
+            email: normalizedEmail,
             password: hashedPassword,
             role
+        });
+
+        // Create Patient profile
+        await Patient.create({
+            userId: user._id,
+            age,
+            phone,
+            gender
         });
 
         res.status(201).json({
@@ -37,12 +82,11 @@ const registerUser = async (req, res) => {
 
     } catch (error) {
 
-        console.error(error);
+        console.error("Register error:", error);
 
         res.status(500).json({
             message: "Server error"
         });
-
     }
 };
 
@@ -50,19 +94,23 @@ const registerUser = async (req, res) => {
 // ==================== LOGIN ====================
 
 const loginUser = async (req, res) => {
-
     try {
+
         const { email, password } = req.body;
 
-        // Check if email and password are provided
+        // Check required fields
         if (!email || !password) {
             return res.status(400).json({
                 message: "Email and password are required"
             });
         }
 
-        // Find user by email
-        const user = await User.findOne({ email });
+        const normalizedEmail = email.trim().toLowerCase();
+
+        // Find user
+        const user = await User.findOne({
+            email: normalizedEmail
+        });
 
         if (!user) {
             return res.status(400).json({
@@ -70,7 +118,7 @@ const loginUser = async (req, res) => {
             });
         }
 
-        // Compare entered password with hashed password
+        // Compare password
         const isPasswordCorrect = await bcrypt.compare(
             password,
             user.password
@@ -94,10 +142,9 @@ const loginUser = async (req, res) => {
             }
         );
 
-        // Send response
         res.status(200).json({
             message: "Login successful",
-            token: token,
+            token,
             user: {
                 id: user._id,
                 name: user.name,
@@ -108,12 +155,11 @@ const loginUser = async (req, res) => {
 
     } catch (error) {
 
-        console.error(error);
+        console.error("Login error:", error);
 
         res.status(500).json({
             message: "Server error"
         });
-
     }
 };
 
